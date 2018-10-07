@@ -131,11 +131,17 @@ $(document).ready(function () {
 </div>
 <div id="download-data" class="section level2">
 <h2>Download Data</h2>
-<p>I downloaded the data, and coded all empty strings <code>&quot;&quot;</code> as NA so that such variables could be removed later.</p>
+<p>I downloaded the data, and coded all empty strings <code>&quot;&quot;</code> as NA so that such variables could be removed later. I further partitioned the training dataset so that part of it could be used for cross-validation.</p>
 <pre class="r"><code>download.file(&quot;https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv&quot;,&quot;pml-training.csv&quot;)
 download.file(&quot;https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv&quot;,&quot;pml-testing.csv&quot;)
-training &lt;- read.csv(&quot;pml-training.csv&quot;, na.strings=c(&quot;&quot;,&quot;NA&quot;))
-testing &lt;- read.csv(&quot;pml-testing.csv&quot;, na.strings=c(&quot;&quot;,&quot;NA&quot;))</code></pre>
+train_data &lt;- read.csv(&quot;pml-training.csv&quot;, na.strings=c(&quot;&quot;,&quot;NA&quot;))
+test_data &lt;- read.csv(&quot;pml-testing.csv&quot;, na.strings=c(&quot;&quot;,&quot;NA&quot;))
+library(caret)</code></pre>
+<pre><code>## Loading required package: lattice</code></pre>
+<pre><code>## Loading required package: ggplot2</code></pre>
+<pre class="r"><code>inTrain &lt;- createDataPartition(y = train_data$classe, p = 0.7, list = FALSE)
+training &lt;- train_data[inTrain,]
+testing &lt;- train_data[-inTrain,]</code></pre>
 </div>
 <div id="processing-the-data" class="section level2">
 <h2>Processing the data</h2>
@@ -145,10 +151,7 @@ varTrain &lt;- training[,-c(1:7)]
 # Remove variables with NA values
 varTrain &lt;- varTrain[,colSums(is.na(varTrain))==0]
 # Check for near zero-variance variables
-library(caret)</code></pre>
-<pre><code>## Loading required package: lattice</code></pre>
-<pre><code>## Loading required package: ggplot2</code></pre>
-<pre class="r"><code>sum(nearZeroVar(varTrain))</code></pre>
+sum(nearZeroVar(varTrain))</code></pre>
 <pre><code>## [1] 0</code></pre>
 </div>
 <div id="configuring-tuning-process" class="section level2">
@@ -166,29 +169,63 @@ fitControl &lt;- trainControl(method = &quot;cv&quot;, number = 5,allowParallel 
 <div id="fitting-the-model" class="section level2">
 <h2>Fitting the model</h2>
 <p>I fitted a random forest model to the data, and checked that it had accuracy of at least 99% on the training dataset. Then, I used the model to predict values for the testing dataset, and then deregistered the parallel processing cluster.</p>
-<p>I expect the model’s out-of-sample error to be lower than its accuracy on the training data.</p>
 <pre class="r"><code>## Fit model
 modelRF &lt;- train(classe ~ ., data = varTrain, method = &quot;rf&quot;, trControl = fitControl)
 print(modelRF)</code></pre>
 <pre><code>## Random Forest 
 ## 
-## 19622 samples
+## 13737 samples
 ##    52 predictor
 ##     5 classes: 'A', 'B', 'C', 'D', 'E' 
 ## 
 ## No pre-processing
 ## Resampling: Cross-Validated (5 fold) 
-## Summary of sample sizes: 15698, 15697, 15698, 15698, 15697 
+## Summary of sample sizes: 10990, 10990, 10988, 10991, 10989 
 ## Resampling results across tuning parameters:
 ## 
 ##   mtry  Accuracy   Kappa    
-##    2    0.9947000  0.9932955
-##   27    0.9938336  0.9921996
-##   52    0.9890430  0.9861393
+##    2    0.9915557  0.9893173
+##   27    0.9910461  0.9886731
+##   52    0.9828205  0.9782653
 ## 
 ## Accuracy was used to select the optimal model using the largest value.
 ## The final value used for the model was mtry = 2.</code></pre>
-<pre class="r"><code>predRF &lt;- predict(modelRF, testing)
+<pre class="r"><code>conf &lt;- confusionMatrix(predict(modelRF, testing), testing$classe)
+conf</code></pre>
+<pre><code>## Confusion Matrix and Statistics
+## 
+##           Reference
+## Prediction    A    B    C    D    E
+##          A 1674    3    0    0    0
+##          B    0 1136    8    0    0
+##          C    0    0 1018   18    0
+##          D    0    0    0  944    4
+##          E    0    0    0    2 1078
+## 
+## Overall Statistics
+##                                           
+##                Accuracy : 0.9941          
+##                  95% CI : (0.9917, 0.9959)
+##     No Information Rate : 0.2845          
+##     P-Value [Acc &gt; NIR] : &lt; 2.2e-16       
+##                                           
+##                   Kappa : 0.9925          
+##  Mcnemar's Test P-Value : NA              
+## 
+## Statistics by Class:
+## 
+##                      Class: A Class: B Class: C Class: D Class: E
+## Sensitivity            1.0000   0.9974   0.9922   0.9793   0.9963
+## Specificity            0.9993   0.9983   0.9963   0.9992   0.9996
+## Pos Pred Value         0.9982   0.9930   0.9826   0.9958   0.9981
+## Neg Pred Value         1.0000   0.9994   0.9984   0.9959   0.9992
+## Prevalence             0.2845   0.1935   0.1743   0.1638   0.1839
+## Detection Rate         0.2845   0.1930   0.1730   0.1604   0.1832
+## Detection Prevalence   0.2850   0.1944   0.1760   0.1611   0.1835
+## Balanced Accuracy      0.9996   0.9978   0.9942   0.9892   0.9979</code></pre>
+<p>The model’s accuracy on the testing data is 99.41%, so we expect its out-of-sample error rate to be 0.59%.</p>
+<p>Then, I used the model to predict values for the testing dataset, and then deregistered the parallel processing cluster.</p>
+<pre class="r"><code>predRF &lt;- predict(modelRF, test_data)
 ## Deregister parallel processing cluster
 stopCluster(cluster)
 registerDoSEQ()</code></pre>

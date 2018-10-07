@@ -9,12 +9,18 @@ This analysis builds a random forest model to predict the quality of barbell lif
 
 ## Download Data
 
-I downloaded the data, and coded all empty strings `""` as NA so that such variables could be removed later.
+I downloaded the data, and coded all empty strings `""` as NA so that such variables could be removed later. I further partitioned the training dataset so that part of it could be used for cross-validation. 
+
 ```{r download, cache = TRUE}
 download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv","pml-training.csv")
 download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv","pml-testing.csv")
-training <- read.csv("pml-training.csv", na.strings=c("","NA"))
-testing <- read.csv("pml-testing.csv", na.strings=c("","NA"))
+train_data <- read.csv("pml-training.csv", na.strings=c("","NA"))
+test_data <- read.csv("pml-testing.csv", na.strings=c("","NA"))
+library(caret)
+inTrain <- createDataPartition(y = train_data$classe, p = 0.7, list = FALSE)
+training <- train_data[inTrain,]
+testing <- train_data[-inTrain,]
+
 ```
 
 ## Processing the data
@@ -27,7 +33,6 @@ varTrain <- training[,-c(1:7)]
 # Remove variables with NA values
 varTrain <- varTrain[,colSums(is.na(varTrain))==0]
 # Check for near zero-variance variables
-library(caret)
 sum(nearZeroVar(varTrain))
 ```
 
@@ -48,13 +53,20 @@ fitControl <- trainControl(method = "cv", number = 5,allowParallel = TRUE)
 
 I fitted a random forest model to the data, and checked that it had accuracy of at least 99% on the training dataset. Then, I used the model to predict values for the testing dataset, and then deregistered the parallel processing cluster. 
 
-I expect the model's out-of-sample error to be lower than its accuracy on the training data. 
-
 ```{r model, cache = TRUE}
 ## Fit model
 modelRF <- train(classe ~ ., data = varTrain, method = "rf", trControl = fitControl)
 print(modelRF)
-predRF <- predict(modelRF, testing)
+conf <- confusionMatrix(predict(modelRF, testing), testing$classe)
+conf
+```
+
+The model's accuracy on the testing data is `r sprintf("%.2f%%",100*conf$overall[1])`, so we expect its out-of-sample error rate to be `r sprintf("%.2f%%",100-100*conf$overall[1])`.
+
+Then, I used the model to predict values for the testing dataset, and then deregistered the parallel processing cluster.
+
+```{r predict, cache = TRUE}
+predRF <- predict(modelRF, test_data)
 ## Deregister parallel processing cluster
 stopCluster(cluster)
 registerDoSEQ()
