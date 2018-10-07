@@ -1,0 +1,61 @@
+---
+title: "Predicting quality of barbell lifts"
+output: html_document
+---
+
+## Executive Summary
+
+This analysis builds a random forest model to predict the quality of barbell lifts, based on data from the [Weight Lifting Exercises Dataset](http://groupware.les.inf.puc-rio.br/har). 
+
+## Download Data
+
+I downloaded the data, and coded all empty strings `""` as NA so that such variables could be removed later.
+```{r download, cache = TRUE}
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv","pml-training.csv")
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv","pml-testing.csv")
+training <- read.csv("pml-training.csv", na.strings=c("","NA"))
+testing <- read.csv("pml-testing.csv", na.strings=c("","NA"))
+```
+
+## Processing the data
+
+I removed the first 7 variables, which are identifiers for observation number, participant name, and time window, and unlikely to be useful as predictors. I also removed all variables with NA values. Finally, I checked that there are no near zero-variance variables. 
+
+```{r process, cache = TRUE}
+# Remove variables for observation number, participant name, timestamp and time window
+varTrain <- training[,-c(1:7)]
+# Remove variables with NA values
+varTrain <- varTrain[,colSums(is.na(varTrain))==0]
+# Check for near zero-variance variables
+library(caret)
+sum(nearZeroVar(varTrain))
+```
+
+## Configuring tuning process
+
+Following the suggested approach on the [course community github](https://github.com/lgreski/datasciencectacontent/blob/master/markdown/pml-randomForestPerformance.md), I configured the `trainControl` function to use parallel processing and k-fold cross-validation, specifying the number of folds as 5. 
+
+```{r configure, cache = TRUE}
+## Configure parallel processing and trainControl 
+library(parallel)
+library(doParallel)
+cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
+registerDoParallel(cluster)
+fitControl <- trainControl(method = "cv", number = 5,allowParallel = TRUE)
+```
+
+## Fitting the model
+
+I fitted a random forest model to the data, and checked that it had accuracy of at least 99% on the training dataset. Then, I used the model to predict values for the testing dataset, and then deregistered the parallel processing cluster. 
+
+I expect the model's out-of-sample error to be lower than its accuracy on the training data. 
+
+```{r model, cache = TRUE}
+## Fit model
+modelRF <- train(classe ~ ., data = varTrain, method = "rf", trControl = fitControl)
+print(modelRF)
+predRF <- predict(modelRF, testing)
+## Deregister parallel processing cluster
+stopCluster(cluster)
+registerDoSEQ()
+```
